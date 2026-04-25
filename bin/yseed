@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# yseed — Load fixture data into the database from JSON, ZWR, or raw.
+#
+# Usage:
+#   yseed fixture.json               load JSON ([{"ref":..,"value":..}, ...])
+#   yseed --clean fixture.json       yclean (all groups) first, then load
+#   yseed --format zwr backup.zwr    load ZWR via mupip load
+#   yseed --format raw fixture.txt   load `^ref=value` lines
+#   cat fixture.json | yseed -       read from stdin (`-` as path)
+#
+# Format auto-detected from first non-blank byte: `[` → json, `^` → raw,
+# `YottaDB MUPIP EXTRACT` header → zwr. Override with --format.
+
+set -euo pipefail
+
+PROJ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PROJ_DIR/scripts/ydb-env.sh"
+
+format=""
+clean=0
+file=""
+
+usage() {
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        -h|--help) usage 0 ;;
+        --clean)   clean=1 ;;
+        --format)  shift; format="${1:?--format requires json|zwr|raw}" ;;
+        --)        shift; file="$1"; break ;;
+        -*)        echo "ERROR: unknown option '$1'" >&2; usage 1 ;;
+        *)         file="$1"; break ;;
+    esac
+    shift
+done
+
+if [[ -z "$file" ]]; then
+    echo "ERROR: no fixture file given" >&2
+    usage 1
+fi
+
+# Materialize input to a real file (mupip load needs one; -auto-detect needs one).
+if [[ "$file" == "-" ]]; then
+    tmpin="$(mktemp)"
+    trap 'rm -f "$tmpin"' EXIT
+    cat > "$tmpin"
+    file="$tmpin"
+elif [[ ! -f "$file" ]]; then
+    echo "ERROR: file not found: $file" >&2
+    exit 1
+fi
+
+if [[ -z "$format" ]]; then
+    head_byte="$(grep -m1 -v '^[[:space:]]*$' "$file" | head -c 25)"
+    if [[ "$head_byte" == YottaDB* ]]; then
+        format="zwr"
+    elif [[ "${head_byte:0:1}" == "[" ]]; then
+        format="json"
+    elif [[ "${head_byte:0:1}" == "^" ]]; then
+        format="raw"
+    else
+        echo "ERROR: cannot auto-detect format. Pass --format explicitly." >&2
+        exit 1
+    fi
+fi
+
+if (( clean )); then
+    "$PROJ_DIR/bin/yclean"
+fi
+
+case "$format" in
+    json)
+        # Stream {ref, value} pairs to MUMPS via stdin to -direct.
+        # python3 emits one `set @"<ref>"="<escaped value>"` per line.
+        cmds_file="$(mktemp)"
+        python3 -c '
+import json, sys
+data = json.load(open(sys.argv[1]))
+for entry in data:
+    ref = entry["ref"].replace("\"", "\"\"")
+    val = entry["value"].replace("\"", "\"\"")
+    print(f"set @\"{ref}\"=\"{val}\"")
+print("halt")
+' "$file" > "$cmds_file"
+        # Count = lines minus the trailing `halt`.
+        count=$(($(wc -l < "$cmds_file") - 1))
+        "$YDB" -direct < "$cmds_file" >/dev/null 2>&1
+        rm -f "$cmds_file"
+        echo "yseed: loaded $count nodes from $(basename "$file") (json)"
+        ;;
+    raw)
+        count=0
+        while IFS='=' read -r ref value; do
+            [[ -z "$ref" || "${ref:0:1}" != "^" ]] && continue
+            ref_esc="${ref//\"/\"\"}"
+            value_esc="${value//\"/\"\"}"
+            "$YDB" -run %XCMD "set @\"${ref_esc}\"=\"${value_esc}\""
+            count=$((count + 1))
+        done < "$file"
+        echo "yseed: loaded $count nodes from $(basename "$file") (raw)"
+        ;;
+    zwr)
+        $ydb_dist/mupip load "$file" >&2
+        echo "yseed: loaded ZWR from $(basename "$file")"
+        ;;
+    *)
+        echo "ERROR: unknown --format '$format'" >&2
+        exit 1
+        ;;
+esac
