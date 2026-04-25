@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# ysnapshot — Capture a MUMPS expression's output and compare against a baseline.
+#
+# Usage:
+#   ysnapshot create NAME 'MUMPS'      run, save output as fixtures/snapshots/NAME.txt
+#   ysnapshot check  NAME 'MUMPS'      run, diff against saved (exit 1 if differ)
+#   ysnapshot update NAME 'MUMPS'      run, overwrite saved baseline
+#   ysnapshot list                     list all snapshots
+#   ysnapshot show NAME                print saved baseline
+#   ysnapshot rm NAME                  delete saved baseline
+#
+# Snapshot directory: fixtures/snapshots/  (created on first use)
+
+set -euo pipefail
+
+PROJ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SNAP_DIR="$PROJ_DIR/fixtures/snapshots"
+
+usage() {
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+snap_path() { echo "$SNAP_DIR/${1}.txt"; }
+
+run_code() { "$PROJ_DIR/bin/yeval" "$1"; }
+
+cmd_create() {
+    local name="$1" code="$2"
+    local path; path="$(snap_path "$name")"
+    if [[ -f "$path" ]]; then
+        echo "ERROR: snapshot '$name' already exists. Use 'update' to replace." >&2
+        exit 1
+    fi
+    mkdir -p "$SNAP_DIR"
+    run_code "$code" > "$path"
+    echo "created $path ($(wc -l < "$path") lines)"
+}
+
+cmd_check() {
+    local name="$1" code="$2"
+    local path; path="$(snap_path "$name")"
+    if [[ ! -f "$path" ]]; then
+        echo "ERROR: no snapshot '$name'. Run 'ysnapshot create' first." >&2
+        exit 1
+    fi
+    local actual="$SNAP_DIR/.check.$$.tmp"
+    mkdir -p "$SNAP_DIR"
+    run_code "$code" > "$actual"
+    local rc=0
+    if cmp -s "$path" "$actual"; then
+        echo "PASS  snapshot '$name' matches"
+    else
+        echo "FAIL  snapshot '$name' differs:"
+        diff -u "$path" "$actual" || true
+        rc=1
+    fi
+    rm -f "$actual"
+    return "$rc"
+}
+
+cmd_update() {
+    local name="$1" code="$2"
+    local path; path="$(snap_path "$name")"
+    mkdir -p "$SNAP_DIR"
+    run_code "$code" > "$path"
+    echo "updated $path"
+}
+
+cmd_list() {
+    if [[ ! -d "$SNAP_DIR" ]]; then echo "(no snapshots)"; return; fi
+    local count=0
+    for f in "$SNAP_DIR"/*.txt; do
+        [[ -f "$f" ]] || continue
+        local name; name="$(basename "$f" .txt)"
+        printf "  %-30s %s lines\n" "$name" "$(wc -l < "$f")"
+        count=$((count+1))
+    done
+    if (( count == 0 )); then echo "(no snapshots)"; fi
+}
+
+cmd_show() {
+    local path; path="$(snap_path "$1")"
+    [[ -f "$path" ]] || { echo "ERROR: no snapshot '$1'" >&2; exit 1; }
+    cat "$path"
+}
+
+cmd_rm() {
+    local path; path="$(snap_path "$1")"
+    [[ -f "$path" ]] || { echo "ERROR: no snapshot '$1'" >&2; exit 1; }
+    rm "$path"
+    echo "removed $path"
+}
+
+case "${1:-}" in
+    -h|--help) usage 0 ;;
+    create)    shift; cmd_create "${1:?name}" "${2:?code}" ;;
+    check)     shift; cmd_check  "${1:?name}" "${2:?code}" ;;
+    update)    shift; cmd_update "${1:?name}" "${2:?code}" ;;
+    list)      cmd_list ;;
+    show)      shift; cmd_show   "${1:?name}" ;;
+    rm)        shift; cmd_rm     "${1:?name}" ;;
+    "")        usage 1 ;;
+    *)         echo "ERROR: unknown command '$1'" >&2; usage 1 ;;
+esac

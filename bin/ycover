@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# ycover — Approximate label coverage by instrumenting the test run with ZBREAK.
+#
+# Usage:
+#   ycover                  run all suites; report covered/uncovered labels
+#   ycover --json           emit machine-readable JSON instead of a table
+#   ycover --uncovered      print only the uncovered labels
+#   ycover SUITE [SUITE..]  restrict to specific test suites
+#
+# Method: parse routines/*.m for column-1 labels, set ZBREAK at each, then
+# run every suite in a single YDB process. The ZBREAK action writes 1 into
+# ^ycov(<routine>,<label>); after the run, anything missing is uncovered.
+# Top-of-file routine labels (e.g. `tasks` at line 1 of tasks.m) and labels
+# named exactly the routine name are ignored — they're never called.
+
+set -euo pipefail
+
+PROJ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$PROJ_DIR/scripts/ydb-env.sh"
+
+format="table"
+filter="all"
+suites=()
+
+usage() {
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        -h|--help)    usage 0 ;;
+        --json)       format="json" ;;
+        --uncovered)  filter="uncovered" ;;
+        -*)           echo "ERROR: unknown option '$1'" >&2; usage 1 ;;
+        *)            suites+=("$1") ;;
+    esac
+    shift
+done
+
+# 1. Discover library labels (skip the top-of-file routine label).
+declare -A LABELS  # key: "routine:label" → 1
+declare -A ROUTINE_LABELS  # routine → space-separated labels
+for f in "$PROJ_DIR"/routines/*.m; do
+    [[ -f "$f" ]] || continue
+    routine="$(basename "$f" .m)"
+    while IFS= read -r label; do
+        # Skip the top-of-file "routine" label (same name as the routine)
+        [[ "$label" == "$routine" ]] && continue
+        LABELS["$routine:$label"]=1
+        ROUTINE_LABELS[$routine]="${ROUTINE_LABELS[$routine]:-} $label"
+    done < <(awk '/^[A-Za-z][A-Za-z0-9]*(\([^)]*\))?[[:space:]]*(;.*)?$/ {
+        line=$0
+        sub(/[[:space:]]+.*$/, "", line)
+        sub(/\(.*$/, "", line)
+        if (line != "") print line
+    }' "$f")
+done
+
+if [[ "${#LABELS[@]}" -eq 0 ]]; then
+    echo "ERROR: no labels found under routines/" >&2
+    exit 1
+fi
+
+# 2. Pick suites to run.
+if [[ "${#suites[@]}" -eq 0 ]]; then
+    for f in "$PROJ_DIR"/routines/tests/*.m; do
+        [[ -f "$f" ]] || continue
+        name="$(basename "$f" .m)"
+        [[ "$name" == "TESTRUN" ]] && continue
+        suites+=("$name")
+    done
+fi
+
+# 3. Build the MUMPS script.
+script="$(mktemp)"
+trap 'rm -f "$script"' EXIT
+{
+    echo 'kill ^ycov'
+    for key in "${!LABELS[@]}"; do
+        routine="${key%%:*}"
+        label="${key##*:}"
+        printf 'zbreak %s^%s:"set ^ycov(""%s"",""%s"")=1"\n' "$label" "$routine" "$routine" "$label"
+    done
+    for s in "${suites[@]}"; do
+        echo "do ^${s}"
+    done
+    echo 'zwrite ^ycov'
+    echo 'halt'
+} > "$script"
+
+# 4. Run the instrumented test pass; suppress test stdout, keep ^ycov dump.
+raw="$("$YDB" -direct < "$script" 2>&1 | grep -E '^\^ycov' || true)"
+
+# 5. Parse covered set from raw output.
+declare -A COVERED
+while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    # ^ycov("routine","label")=1
+    inner="${line#^ycov(\"}"
+    routine="${inner%%\"*}"
+    rest="${inner#*\",\"}"
+    label="${rest%%\"*}"
+    COVERED["$routine:$label"]=1
+done <<< "$raw"
+
+# 6. Emit report.
+total=${#LABELS[@]}
+covered=${#COVERED[@]}
+percent=$(awk -v c="$covered" -v t="$total" 'BEGIN { printf "%.1f", (t==0)?0:(c*100/t) }')
+
+if [[ "$format" == "json" ]]; then
+    printf '{\n  "total": %d,\n  "covered": %d,\n  "percent": %s,\n  "labels": [\n' \
+        "$total" "$covered" "$percent"
+    first=1
+    for key in $(printf '%s\n' "${!LABELS[@]}" | sort); do
+        routine="${key%%:*}"
+        label="${key##*:}"
+        is_covered="false"
+        [[ -n "${COVERED[$key]:-}" ]] && is_covered="true"
+        if (( first )); then first=0; else printf ',\n'; fi
+        printf '    {"routine":"%s","label":"%s","covered":%s}' "$routine" "$label" "$is_covered"
+    done
+    printf '\n  ]\n}\n'
+    exit 0
+fi
+
+# Table format
+if [[ "$filter" == "uncovered" ]]; then
+    echo "Uncovered labels ($((total - covered)) of $total):"
+    for key in $(printf '%s\n' "${!LABELS[@]}" | sort); do
+        if [[ -z "${COVERED[$key]:-}" ]]; then
+            routine="${key%%:*}"; label="${key##*:}"
+            printf "  %s^%s\n" "$label" "$routine"
+        fi
+    done
+    exit 0
+fi
+
+# Per-routine summary
+declare -A ROUTINE_TOTAL ROUTINE_COVERED
+for key in "${!LABELS[@]}"; do
+    routine="${key%%:*}"
+    ROUTINE_TOTAL[$routine]=$(( ${ROUTINE_TOTAL[$routine]:-0} + 1 ))
+done
+for key in "${!COVERED[@]}"; do
+    routine="${key%%:*}"
+    ROUTINE_COVERED[$routine]=$(( ${ROUTINE_COVERED[$routine]:-0} + 1 ))
+done
+
+printf "%-15s %8s %10s %8s\n" "Routine" "Covered" "Total" "Percent"
+printf "%-15s %8s %10s %8s\n" "──────" "───────" "─────" "───────"
+for r in $(printf '%s\n' "${!ROUTINE_TOTAL[@]}" | sort); do
+    rt="${ROUTINE_TOTAL[$r]}"
+    rc="${ROUTINE_COVERED[$r]:-0}"
+    rp=$(awk -v c="$rc" -v t="$rt" 'BEGIN { printf "%.0f%%", (c*100/t) }')
+    printf "%-15s %8d %10d %8s\n" "$r" "$rc" "$rt" "$rp"
+done
+printf "%-15s %8s %10s %8s\n" "──────" "───────" "─────" "───────"
+printf "%-15s %8d %10d %8s\n" "Total" "$covered" "$total" "${percent}%"

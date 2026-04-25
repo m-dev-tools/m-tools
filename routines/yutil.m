@@ -60,6 +60,31 @@ exportJson      ; $ZCMDLINE: <gname>
         write "]",!
         quit
         ;
+; ── Benchmarking ─────────────────────────────────────────────────────────────
+        ;
+        ; Run <code> for <iters> iterations after 3 warmup runs. Times each
+        ; iteration with $ZHOROLOG (microsecond resolution) and writes raw
+        ; per-iteration microseconds to stdout, one per line. The shell wrapper
+        ; (yperf) computes statistics. Argument format on $ZCMDLINE:
+        ;   <iters>|<code>
+bench   ;
+        new args,iters,code,t1,t2,delta,i
+        set args=$zcmdline
+        set iters=+$piece(args,"|",1)
+        set code=$piece(args,"|",2,9999)
+        if iters<1 set iters=100
+        if code="" write "ERROR: no code supplied",! quit
+        ; Warmup
+        for i=1:1:3 xecute code
+        ; Measurement
+        for i=1:1:iters do
+        . set t1=$zhorolog
+        . xecute code
+        . set t2=$zhorolog
+        . set delta=($piece(t2,",",2)-$piece(t1,",",2))*1000000+($piece(t2,",",3)-$piece(t1,",",3))
+        . write delta,!
+        quit
+        ;
 ; ── List globals with data ───────────────────────────────────────────────────
         ;
         ; Walks $ZGBLDIR's namespace and prints one global name per line for

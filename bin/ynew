@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# ynew — Scaffold a new MUMPS module + matching test suite + Makefile entry.
+#
+# Usage:
+#   ynew <name>             create routines/<name>.m + routines/tests/<NAME>TST.m
+#   ynew <name> --no-make   skip the Makefile injection
+#   ynew --dry <name>       print what would be created without writing
+#
+# After scaffolding, run `make test` — the placeholder test should pass and
+# you can rename / replace the example function.
+
+set -euo pipefail
+
+PROJ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+dry=0
+edit_make=1
+name=""
+
+usage() {
+    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        -h|--help)  usage 0 ;;
+        --dry)      dry=1 ;;
+        --no-make)  edit_make=0 ;;
+        -*)         echo "ERROR: unknown option '$1'" >&2; usage 1 ;;
+        *)          name="$1" ;;
+    esac
+    shift
+done
+
+[[ -z "$name" ]] && { echo "ERROR: module name required" >&2; usage 1; }
+[[ "$name" =~ ^[a-z][a-z0-9]*$ ]] || {
+    echo "ERROR: name must be lowercase alphanumerics, starting with a letter" >&2
+    exit 1
+}
+
+upper="${name^^}"
+suite="${upper}TST"
+mod_file="$PROJ_DIR/routines/${name}.m"
+test_file="$PROJ_DIR/routines/tests/${suite}.m"
+
+if [[ -e "$mod_file" ]]; then
+    echo "ERROR: $mod_file already exists" >&2
+    exit 1
+fi
+if [[ -e "$test_file" ]]; then
+    echo "ERROR: $test_file already exists" >&2
+    exit 1
+fi
+
+write_or_show() {
+    local path="$1" body="$2"
+    if (( dry )); then
+        echo "── $path ──"
+        echo "$body"
+        echo
+    else
+        printf "%s" "$body" > "$path"
+        echo "wrote $path"
+    fi
+}
+
+mod_body="${name}        ; ${name} — short one-line description (rewrite me)
+        quit
+        ;
+greet(who)      ; example function — replace with your own
+        quit \"hello, \"_who
+"
+
+test_body="${suite}        ; Test suite for ${name}.m — run with: ytest ${name}
+        new pass,fail
+        do start^TESTRUN(.pass,.fail)
+        ;
+        do tGreet(.pass,.fail)
+        ;
+        do report^TESTRUN(pass,fail)
+        quit
+        ;
+tGreet(pass,fail)       ;@TEST \"greet() returns hello, NAME\"
+        new result
+        set result=\$\$greet^${name}(\"world\")
+        do eq^TESTRUN(.pass,.fail,result,\"hello, world\",\"greet(world)\")
+        quit
+"
+
+write_or_show "$mod_file"  "$mod_body"
+write_or_show "$test_file" "$test_body"
+
+if (( edit_make )); then
+    if grep -q "^@\$(YDB) -run \^${suite}\b" "$PROJ_DIR/Makefile" 2>/dev/null; then
+        echo "Makefile already references ${suite}; skipping"
+    else
+        if (( dry )); then
+            echo "── Makefile injection ──"
+            echo "Would insert before 'All suites passed.':"
+            printf '\t@echo "==> Running %s..."\n\t@$(YDB) -run ^%s\n' "$suite" "$suite"
+        else
+            # Insert two lines just before the `All suites passed.` echo.
+            python3 - "$PROJ_DIR/Makefile" "$suite" <<'PY'
+import sys, pathlib, re
+path = pathlib.Path(sys.argv[1])
+suite = sys.argv[2]
+text = path.read_text()
+inject = f'\t@echo "==> Running {suite}..."\n\t@$(YDB) -run ^{suite}\n'
+marker = '\t@echo ""\n\t@echo "All suites passed."\n'
+if marker not in text:
+    sys.exit(f"Makefile marker not found — add manually:\n{inject}")
+new = text.replace(marker, inject + marker, 1)
+path.write_text(new)
+print(f"injected ^{suite} into Makefile test target")
+PY
+        fi
+    fi
+fi
+
+if (( ! dry )); then
+    echo
+    echo "Next: bin/ytest ${name}    # should print 1 PASS"
+fi
