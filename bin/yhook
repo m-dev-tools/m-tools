@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# yhook — Manage the git pre-commit hook for this project.
+#
+# Usage:
+#   yhook install      install .git/hooks/pre-commit
+#   yhook uninstall    remove the pre-commit hook
+#   yhook run          run the hook manually (same checks git would run)
+#   yhook status       show whether the hook is currently installed
+#
+# Hook behavior on commit:
+#   1. ycheck --all   syntax-check every routine
+#   2. ytest          run all test suites
+# If either step fails, the commit is aborted.
+
+set -euo pipefail
+
+PROJ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HOOK_PATH="$PROJ_DIR/.git/hooks/pre-commit"
+MARKER="# yhook-managed pre-commit hook (ydb)"
+
+usage() {
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+hook_body() {
+    cat <<HOOK
+#!/usr/bin/env bash
+$MARKER
+# Aborts the commit if syntax check or tests fail.
+set -e
+PROJ="\$(git rev-parse --show-toplevel)"
+echo "[yhook] ycheck --all"
+"\$PROJ/bin/ycheck" --all
+echo "[yhook] ytest"
+"\$PROJ/bin/ytest"
+HOOK
+}
+
+is_yhook_managed() {
+    [[ -f "$HOOK_PATH" ]] && grep -q "^${MARKER}\$" "$HOOK_PATH"
+}
+
+cmd_install() {
+    mkdir -p "$(dirname "$HOOK_PATH")"
+    if [[ -f "$HOOK_PATH" ]] && ! is_yhook_managed; then
+        echo "ERROR: $HOOK_PATH already exists and was not created by yhook." >&2
+        echo "Remove it manually or back it up before running 'yhook install'." >&2
+        exit 1
+    fi
+    hook_body > "$HOOK_PATH"
+    chmod +x "$HOOK_PATH"
+    echo "Installed: $HOOK_PATH"
+}
+
+cmd_uninstall() {
+    if [[ ! -f "$HOOK_PATH" ]]; then
+        echo "No pre-commit hook present."
+        return 0
+    fi
+    if ! is_yhook_managed; then
+        echo "ERROR: $HOOK_PATH was not installed by yhook — refusing to remove." >&2
+        exit 1
+    fi
+    rm -f "$HOOK_PATH"
+    echo "Removed: $HOOK_PATH"
+}
+
+cmd_run() {
+    echo "[yhook] ycheck --all"
+    "$PROJ_DIR/bin/ycheck" --all
+    echo "[yhook] ytest"
+    "$PROJ_DIR/bin/ytest"
+}
+
+cmd_status() {
+    if is_yhook_managed; then
+        echo "Installed (managed by yhook)"
+    elif [[ -f "$HOOK_PATH" ]]; then
+        echo "A pre-commit hook exists but was not installed by yhook"
+    else
+        echo "Not installed"
+    fi
+}
+
+case "${1:-}" in
+    -h|--help)  usage 0 ;;
+    install)    cmd_install ;;
+    uninstall)  cmd_uninstall ;;
+    run)        cmd_run ;;
+    status)     cmd_status ;;
+    "")         usage 1 ;;
+    *)          echo "ERROR: unknown command '$1'" >&2; usage 1 ;;
+esac

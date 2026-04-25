@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# ywhat — List labels and signatures in a MUMPS routine.
+#
+# Usage:
+#   ywhat tasks               list labels in routines/tasks.m
+#   ywhat TASKSTST            list labels in routines/tests/TASKSTST.m
+#   ywhat --all               list labels in every .m file
+#
+# Output: label(args) — line N — first comment-line description (if any)
+
+set -euo pipefail
+
+PROJ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+usage() {
+    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+resolve_file() {
+    local name="$1"
+    name="${name%.m}"
+    name="${name##*/}"
+    if [[ -f "$PROJ_DIR/routines/${name}.m" ]]; then
+        echo "$PROJ_DIR/routines/${name}.m"
+        return 0
+    fi
+    if [[ -f "$PROJ_DIR/routines/tests/${name}.m" ]]; then
+        echo "$PROJ_DIR/routines/tests/${name}.m"
+        return 0
+    fi
+    return 1
+}
+
+list_labels() {
+    local file="$1"
+    local rel="${file#$PROJ_DIR/}"
+    echo "$rel:"
+    # Match column-1 lines starting with a letter or % — those are labels.
+    # Capture: line number, label+args, optional ; comment.
+    awk '
+        /^[A-Za-z%][A-Za-z0-9%]*(\([^)]*\))?[[:space:]]*(;.*)?$/ {
+            line=$0
+            sub(/[[:space:]]+$/, "", line)
+            # Split label part vs comment part
+            comment=""
+            label_part=line
+            n=index(line, ";")
+            if (n > 0) {
+                label_part=substr(line, 1, n-1)
+                sub(/[[:space:]]+$/, "", label_part)
+                comment=substr(line, n+1)
+                sub(/^[[:space:]]+/, "", comment)
+            }
+            # Strip @TEST decoration to keep description readable
+            sub(/^@TEST[[:space:]]*/, "", comment)
+            if (comment != "")
+                printf "  %-40s — line %d — %s\n", label_part, NR, comment
+            else
+                printf "  %-40s — line %d\n", label_part, NR
+        }
+    ' "$file"
+}
+
+case "${1:-}" in
+    -h|--help) usage 0 ;;
+    "")        usage 1 ;;
+esac
+
+if [[ "$1" == "--all" ]]; then
+    for f in "$PROJ_DIR"/routines/*.m "$PROJ_DIR"/routines/tests/*.m; do
+        [[ -f "$f" ]] || continue
+        list_labels "$f"
+        echo
+    done
+else
+    file="$(resolve_file "$1")" || {
+        echo "ERROR: routine '$1' not found in routines/ or routines/tests/" >&2
+        exit 1
+    }
+    list_labels "$file"
+fi
