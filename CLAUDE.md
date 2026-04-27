@@ -1,9 +1,28 @@
-# MUMPS / YottaDB — Claude Context
+# M Development Toolchain (`m-tools`) — Claude Context
+
+This project is the **hub** for the M (MUMPS) development toolchain. It owns the shell tools (`y*` commands today, planned `m <subcmd>` / `ydb <subcmd>` umbrella) and integrates outputs from sibling projects:
+
+- [`m-standard`](https://github.com/rafael5/m-standard) (`~/projects/m-standard/`) — the spec layer (grammar-surface JSON reconciled from AnnoStd / YDB / IRIS / SAC).
+- [`tree-sitter-m`](https://github.com/rafael5/tree-sitter-m) (`~/projects/tree-sitter-m/`) — the production tree-sitter grammar generated from `m-standard`.
+- [`tree-sitter-m-vscode`](https://github.com/rafael5/tree-sitter-m-vscode) (`~/projects/tree-sitter-m-vscode/`) — VS Code extension exercising the grammar end-to-end.
+
+For sibling-project status, link to that project's STATUS / README rather than restating it here.
+
+## Strategy and implementation docs
+
+- [`docs/gap-analysis-and-remediation-strategy.md`](docs/gap-analysis-and-remediation-strategy.md) — *M Tools — Gap Analysis and Remediation Strategy*. Strategy: problem framing, gap table, Tier 1–4 prioritisation, technology-optimal remediation (Addendum A), prioritized post-parser sequence (Addendum B), top-5 language toolchains reference (Appendix B), what ships with YottaDB (Appendix C).
+- [`docs/implementation.md`](docs/implementation.md) — *M Development Toolchain — Implementation*. The canonical command map (`m help`), as-built tool specifications, implementation status, per-tool deltas.
+
+## Scope and portability framing
+
+M (MUMPS) is portable across implementations (InterSystems IRIS, YottaDB, GT.M). This project uses **YottaDB as the foundation runtime** because it is the only fully open-source M runtime under active maintenance (AGPL-3.0), making the entire toolchain reproducible without licence negotiation. Source-only tools (formatters, linters, doc generators built on `tree-sitter-m`) are portable across M implementations; runtime-bound tools (test runner, coverage, trace tail) are YottaDB-specific.
+
+YottaDB's vendor commands (`mupip`, `gde`, `lke`, `dse`, `ydb` runtime, in-runtime debug commands) are used directly — never wrapped or renamed. Their own `--help` is canonical.
 
 ## Environment
 - YottaDB (GT.M-compatible MUMPS runtime), installed at `/usr/local/lib/yottadb/rXXX/`
-- Database files: `~/data/ydb/` (not in git)
-- Routines (source): `~/projects/ydb/routines/` (git-controlled)
+- Database files: `~/data/ydb/` (not in git; data path retains `ydb` since YDB is the runtime)
+- Routines (source): `~/projects/m-tools/routines/` (git-controlled)
 - Direnv: `.envrc` sets all `ydb_*` env vars automatically on `cd`
 
 ## MUMPS Language Basics (for Claude)
