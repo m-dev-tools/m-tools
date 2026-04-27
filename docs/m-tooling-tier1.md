@@ -24,7 +24,12 @@
   - [3.5 Validation gates](#35-validation-gates)
   - [3.6 Out of scope (intentional)](#36-out-of-scope-intentional)
 - [4. Why Tier 1 first](#4-why-tier-1-first)
-- [5. Open questions](#5-open-questions)
+- [5. Design decisions](#5-design-decisions)
+  - [5.1 IRIS adapter ownership](#51-iris-adapter-ownership)
+  - [5.2 `^XINDEX` integration](#52-xindex-integration)
+  - [5.3 Performance baselining](#53-performance-baselining)
+  - [5.4 Editor integration cadence](#54-editor-integration-cadence)
+  - [5.5 Versioning across `m-standard` updates](#55-versioning-across-m-standard-updates)
 
 ---
 
@@ -189,13 +194,64 @@ The case for Tier 1 primacy has three legs, all already established in the compa
 
 ---
 
-## 5. Open questions
+## 5. Design decisions
 
-- **Adapter ownership.** Who maintains the IRIS adapter for the test runner? YottaDB-side is the primary investment; IRIS-side requires either community contribution or an InterSystems-aligned partner who can validate against an IRIS instance.
-- **`^XINDEX` integration.** `^XINDEX` (the VA Kernel Toolkit static analyser) overlaps with the linter. Should `m lint` import XINDEX's rule set, or treat `^XINDEX` as a complementary tool? The current preference is the latter — `m lint` rules are **additive** (catching things XINDEX misses) rather than replacing what XINDEX does well — but this is worth revisiting once `m lint` has a working rule set.
-- **Performance baselining.** The 60 s / 120 s budgets in §3.5 are first-pass estimates and need empirical baselining once the tools exist. They may turn out to be too tight or too loose.
-- **Editor integration cadence.** VS Code / Vim / Emacs language-server integrations are out of Tier 1 strict scope, but JSON / LSP-compatible output from each tool should be considered from day one — adding it later is harder than designing for it.
-- **Versioning across `m-standard` updates.** When `m-standard` ships a new grammar-surface (e.g., adding IRIS-side tokens), how do downstream tools (formatter, linter) handle it? A pinned-version model with explicit grammar-surface compatibility ranges is the likely answer.
+The five questions raised during initial planning now have working resolutions. They remain provisional — they may be revisited as work proceeds — but the project starts with these decisions in place.
+
+### 5.1 IRIS adapter ownership
+
+**Decision: defer indefinitely. Tier 1 ships without an IRIS adapter.**
+
+InterSystems' demonstrated trajectory is to promote IRIS ObjectScript (IOS) as the developer-facing language and to scrub mention of MUMPS where possible — the 2018 Caché → IRIS rename was a marketing exercise, and IOS is a proprietary wrapper sitting *between* IRIS users and the MUMPS substrate. The vendor is not investing in MUMPS-side developer experience and has shown no interest in doing so. (See [m-tool-gap-analysis.md §1.2 naming history](m-tool-gap-analysis.md#naming-history-intersystems-mumps--caché-objectscript--iris-objectscript-ios) and [§4.1.3](m-tool-gap-analysis.md#413-iris-tooling-by-file-scope-and-language) for the evidence.)
+
+Building and maintaining an IRIS adapter would require coordinating with a vendor whose strategic interests are misaligned with the goals of this work. The pragmatic choice is to invest the same effort in YottaDB and the source-level tooling — which ports automatically to any conformant M engine — and let an IRIS adapter remain a community contribution if one ever emerges. The source-level tools (formatter, linter, test discovery) are unaffected by this decision; they run on `.m` files via the parser, regardless of which engine the runtime side targets.
+
+### 5.2 `^XINDEX` integration
+
+**Decision: import the `^XINDEX` rule set as the linter's baseline; validate against XINDEX on the VistA corpus; then expand. Expose rule-family selection via a `--rules` toggle.**
+
+Mechanics:
+
+- The Tier 1 linter's first rule pack **replicates the XINDEX rule set**, mapping each XINDEX check to an `m lint` rule with stable IDs (e.g., `M-XINDX-001`, `M-XINDX-002`, …).
+- Running `m lint --rules xindex` on the VistA corpus must reproduce XINDEX's findings — a hard validation gate ("if XINDEX flags it, we flag it; if XINDEX doesn't flag it, we don't").
+- After parity, `m lint` extends with rules that XINDEX does not cover: parser-aware checks XINDEX cannot do (e.g., naked-reference hazards in nested dot blocks), modern lint categories (dead-code analysis, unused-locals), SAC compliance levels, and project-specific rules.
+- A `--rules` toggle selects the rule family at invocation time:
+  - `--rules xindex` — XINDEX-equivalent only (legacy compatibility mode)
+  - `--rules sac` — VA SAC compliance set (driven from `m-standard`'s SAC mappings)
+  - `--rules all` — everything the linter knows
+  - `--rules <custom>` — per-project profiles defined in `m.toml`
+
+**Rationale.** XINDEX's rule set encodes decades of accumulated VA / VistA experience about what to catch in M code. Replicating it gives the linter immediate credibility on the VistA corpus, makes the migration path frictionless ("disable `^XINDEX`, enable `m lint --rules xindex`, expect the same findings"), and provides a baseline from which to expand. The pattern of "absorb the predecessor, then extend" is well-precedented — ESLint absorbed JSHint / JSLint rules; Ruff absorbed flake8 / isort / pyupgrade.
+
+### 5.3 Performance baselining
+
+**Decision: TBD. Resolved by measurement once the tools exist.**
+
+The 60 s / 120 s budgets in §3.5 are first-pass estimates. Empirical baselining will happen once each tool exists and can be measured against the 40,000-routine VistA corpus on representative hardware. If the budgets prove unrealistic, they will be revised based on actual measurements; the *requirement* of having a documented budget remains, even if the specific numbers change. Performance regressions versus the budget should be a CI-blocking event from the first release.
+
+### 5.4 Editor integration cadence
+
+**Decision: JSON and LSP-compatible output from the very first release of each tool. VS Code is the primary editor target.**
+
+Mechanics:
+
+- Each tool ships with a `--format=json` flag from the first release. The JSON output schema is documented and held stable across patch versions.
+- An **LSP server** is developed alongside the tool implementation, not bolted on after. The LSP wrapper consumes the tool's own JSON output internally — so editor integration and CLI use share a single source of truth for diagnostics, formatting, and test results.
+- A **VS Code extension** is the primary editor surface: linter diagnostics, format-on-save (`m fmt`), test-runner integration via the VS Code Test Explorer API. Vim / Emacs / JetBrains LSP clients work without additional effort once the LSP server exists.
+
+**Rationale.** Adding LSP / IDE support after the fact is materially more expensive than designing for it upfront — it requires retrofitting tool internals to expose structured output and support partial / incremental computation. VS Code is the dominant editor in contemporary developer surveys ([Stack Overflow Developer Survey 2024](https://survey.stackoverflow.co/2024/) places it at the top), and it is the editor most likely to be installed by the M developers who would benefit from this work. Designing for VS Code first incidentally serves all other LSP-aware editors.
+
+### 5.5 Versioning across `m-standard` updates
+
+**Decision: each tool pins to a specific `m-standard` snapshot identified by the generation date of the `m-standard` artefact the tool was built against.**
+
+Mechanics:
+
+- Each tool's release manifest records the `m-standard` generation date (e.g., `m-standard@2025-01-15`).
+- Upgrading a tool to a newer `m-standard` snapshot is a **deliberate operation at release time**, accompanied by regression tests against the VistA corpus to confirm no parsing or rule-evaluation drift.
+- Tools do not float against a moving `m-standard` — that would compromise reproducibility (a `m fmt` run today must produce the same output as a `m fmt` run last year against the same source).
+
+**Rationale.** Pinning by date is simpler than version-range constraints, and `m-standard`'s build is byte-deterministic — so a date is sufficient to identify an exact snapshot. Reproducibility is more important than being on the absolute newest grammar surface; users who need new tokens upgrade explicitly.
 
 ---
 
