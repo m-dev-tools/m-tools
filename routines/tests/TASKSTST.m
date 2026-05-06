@@ -1,6 +1,6 @@
 TASKSTST        ; Tests for tasks.m
         new pass,fail
-        do start^TESTRUN(.pass,.fail)
+        do start^STDASSERT(.pass,.fail)
         ;
         ; clean state before all tests
         do clearAll^tasks()
@@ -25,7 +25,7 @@ TASKSTST        ; Tests for tasks.m
         ; clean up after tests
         do clearAll^tasks()
         ;
-        do report^TESTRUN(pass,fail)
+        do report^STDASSERT(pass,fail)
         quit
         ;
 ; ── Helpers ───────────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ tAddReturnsId(pass,fail)        ;@TEST "add() returns a numeric ID"
         do clean
         new id
         set id=$$add^tasks("Buy milk")
-        do ok^TESTRUN(.pass,.fail,id>0,"add returns positive ID")
+        do true^STDASSERT(.pass,.fail,id>0,"add returns positive ID")
         quit
         ;
 tAddStoresTitle(pass,fail)      ;@TEST "add() stores the title retrievably"
@@ -48,20 +48,20 @@ tAddStoresTitle(pass,fail)      ;@TEST "add() stores the title retrievably"
         new id,title
         set id=$$add^tasks("Walk the dog")
         set title=$$getTitle^tasks(id)
-        do eq^TESTRUN(.pass,.fail,title,"Walk the dog","title stored correctly")
+        do eq^STDASSERT(.pass,.fail,title,"Walk the dog","title stored correctly")
         quit
         ;
 tAddRequiresTitle(pass,fail)    ;@TEST "add() raises error on empty title"
         new ok,errMsg
         do tryCatch^safe("set id=$$add^tasks("""")",.ok,.errMsg)
-        do eq^TESTRUN(.pass,.fail,ok,0,"empty title raises error")
+        do eq^STDASSERT(.pass,.fail,ok,0,"empty title raises error")
         quit
         ;
 tNewTaskIsOpen(pass,fail)       ;@TEST "newly added task has done=0"
         do clean
         new id
         set id=$$add^tasks("New task")
-        do eq^TESTRUN(.pass,.fail,$$isDone^tasks(id),0,"new task is open")
+        do eq^STDASSERT(.pass,.fail,$$isDone^tasks(id),0,"new task is open")
         quit
         ;
 tDoneMarksComplete(pass,fail)   ;@TEST "done() sets done=1"
@@ -69,7 +69,7 @@ tDoneMarksComplete(pass,fail)   ;@TEST "done() sets done=1"
         new id
         set id=$$add^tasks("Finish report")
         do done^tasks(id)
-        do eq^TESTRUN(.pass,.fail,$$isDone^tasks(id),1,"done() marks task complete")
+        do eq^STDASSERT(.pass,.fail,$$isDone^tasks(id),1,"done() marks task complete")
         quit
         ;
 tUndoneReopens(pass,fail)       ;@TEST "undone() sets done=0 again"
@@ -78,13 +78,13 @@ tUndoneReopens(pass,fail)       ;@TEST "undone() sets done=0 again"
         set id=$$add^tasks("Write tests")
         do done^tasks(id)
         do undone^tasks(id)
-        do eq^TESTRUN(.pass,.fail,$$isDone^tasks(id),0,"undone() reopens task")
+        do eq^STDASSERT(.pass,.fail,$$isDone^tasks(id),0,"undone() reopens task")
         quit
         ;
 tDoneOnMissing(pass,fail)       ;@TEST "done() raises error for non-existent ID"
         new ok,errMsg
         do tryCatch^safe("do done^tasks(99999)",.ok,.errMsg)
-        do eq^TESTRUN(.pass,.fail,ok,0,"done() on missing ID raises error")
+        do eq^STDASSERT(.pass,.fail,ok,0,"done() on missing ID raises error")
         quit
         ;
 tDelRemovesTask(pass,fail)      ;@TEST "del() removes the task"
@@ -92,20 +92,20 @@ tDelRemovesTask(pass,fail)      ;@TEST "del() removes the task"
         new id
         set id=$$add^tasks("Temporary task")
         do del^tasks(id)
-        do eq^TESTRUN(.pass,.fail,$$exists^tasks(id),0,"task gone after del()")
+        do eq^STDASSERT(.pass,.fail,$$exists^tasks(id),0,"task gone after del()")
         quit
         ;
 tDelOnMissing(pass,fail)        ;@TEST "del() raises error for non-existent ID"
         new ok,errMsg
         do tryCatch^safe("do del^tasks(99999)",.ok,.errMsg)
-        do eq^TESTRUN(.pass,.fail,ok,0,"del() on missing ID raises error")
+        do eq^STDASSERT(.pass,.fail,ok,0,"del() on missing ID raises error")
         quit
         ;
 tExistsAfterAdd(pass,fail)      ;@TEST "exists() returns 1 after add"
         do clean
         new id
         set id=$$add^tasks("Check existence")
-        do eq^TESTRUN(.pass,.fail,$$exists^tasks(id),1,"exists() after add")
+        do eq^STDASSERT(.pass,.fail,$$exists^tasks(id),1,"exists() after add")
         quit
         ;
 tExistsAfterDel(pass,fail)      ;@TEST "exists() returns 0 after del"
@@ -113,12 +113,12 @@ tExistsAfterDel(pass,fail)      ;@TEST "exists() returns 0 after del"
         new id
         set id=$$add^tasks("Delete me")
         do del^tasks(id)
-        do eq^TESTRUN(.pass,.fail,$$exists^tasks(id),0,"exists() after del")
+        do eq^STDASSERT(.pass,.fail,$$exists^tasks(id),0,"exists() after del")
         quit
         ;
 tCountEmpty(pass,fail)  ;@TEST "count() returns 0 on empty task list"
         do clean
-        do eq^TESTRUN(.pass,.fail,$$count^tasks(),0,"count empty")
+        do eq^STDASSERT(.pass,.fail,$$count^tasks(),0,"count empty")
         quit
         ;
 tCountAfterAdds(pass,fail)      ;@TEST "count() reflects correct total"
@@ -126,7 +126,7 @@ tCountAfterAdds(pass,fail)      ;@TEST "count() reflects correct total"
         do add^tasks("Task one")
         do add^tasks("Task two")
         do add^tasks("Task three")
-        do eq^TESTRUN(.pass,.fail,$$count^tasks(),3,"count after 3 adds")
+        do eq^STDASSERT(.pass,.fail,$$count^tasks(),3,"count after 3 adds")
         quit
         ;
 tCountOpen(pass,fail)   ;@TEST "countOpen() excludes completed tasks"
@@ -136,7 +136,7 @@ tCountOpen(pass,fail)   ;@TEST "countOpen() excludes completed tasks"
         set id2=$$add^tasks("Open two")
         set id3=$$add^tasks("Done one")
         do done^tasks(id3)
-        do eq^TESTRUN(.pass,.fail,$$countOpen^tasks(),2,"2 open out of 3")
+        do eq^STDASSERT(.pass,.fail,$$countOpen^tasks(),2,"2 open out of 3")
         quit
         ;
 tClearDone(pass,fail)   ;@TEST "clearDone() removes only completed tasks"
@@ -146,9 +146,9 @@ tClearDone(pass,fail)   ;@TEST "clearDone() removes only completed tasks"
         set id2=$$add^tasks("Delete me")
         do done^tasks(id2)
         set deleted=$$clearDone^tasks()
-        do eq^TESTRUN(.pass,.fail,deleted,1,"clearDone returns count deleted")
-        do eq^TESTRUN(.pass,.fail,$$exists^tasks(id1),1,"open task survived")
-        do eq^TESTRUN(.pass,.fail,$$exists^tasks(id2),0,"done task removed")
+        do eq^STDASSERT(.pass,.fail,deleted,1,"clearDone returns count deleted")
+        do eq^STDASSERT(.pass,.fail,$$exists^tasks(id1),1,"open task survived")
+        do eq^STDASSERT(.pass,.fail,$$exists^tasks(id2),0,"done task removed")
         quit
         ;
 tIdsIncrement(pass,fail)        ;@TEST "each add() gets a unique incrementing ID"
@@ -157,6 +157,6 @@ tIdsIncrement(pass,fail)        ;@TEST "each add() gets a unique incrementing ID
         set id1=$$add^tasks("First")
         set id2=$$add^tasks("Second")
         set id3=$$add^tasks("Third")
-        do ok^TESTRUN(.pass,.fail,id2>id1,"id2 > id1")
-        do ok^TESTRUN(.pass,.fail,id3>id2,"id3 > id2")
+        do true^STDASSERT(.pass,.fail,id2>id1,"id2 > id1")
+        do true^STDASSERT(.pass,.fail,id3>id2,"id3 > id2")
         quit

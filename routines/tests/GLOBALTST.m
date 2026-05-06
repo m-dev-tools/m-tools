@@ -1,6 +1,6 @@
 GLOBALTST       ; Tests for globals.m
         new pass,fail
-        do start^TESTRUN(.pass,.fail)
+        do start^STDASSERT(.pass,.fail)
         ;
         do tSetGet(.pass,.fail)
         do tGetMissing(.pass,.fail)
@@ -12,7 +12,7 @@ GLOBALTST       ; Tests for globals.m
         do tListFields(.pass,.fail)
         do tDelContact(.pass,.fail)
         ;
-        do report^TESTRUN(pass,fail)
+        do report^STDASSERT(pass,fail)
         quit
         ;
 ; ── Setup / teardown helpers ──────────────────────────────────────────────────
@@ -29,14 +29,14 @@ tSetGet(pass,fail)      ;@TEST "set and get a value roundtrips correctly"
         do basicSet^globals("color","blue")
         new result
         set result=$$basicGet^globals("color")
-        do eq^TESTRUN(.pass,.fail,result,"blue","get after set")
+        do eq^STDASSERT(.pass,.fail,result,"blue","get after set")
         quit
         ;
 tGetMissing(pass,fail)  ;@TEST "get on missing key returns empty string"
         do clean
         new result
         set result=$$basicGet^globals("nosuchkey")
-        do eq^TESTRUN(.pass,.fail,result,"","get missing key returns empty")
+        do eq^STDASSERT(.pass,.fail,result,"","get missing key returns empty")
         quit
         ;
 tDelete(pass,fail)      ;@TEST "delete removes the value"
@@ -45,14 +45,14 @@ tDelete(pass,fail)      ;@TEST "delete removes the value"
         do basicDel^globals("x")
         new result
         set result=$$basicGet^globals("x")
-        do eq^TESTRUN(.pass,.fail,result,"","value gone after delete")
+        do eq^STDASSERT(.pass,.fail,result,"","value gone after delete")
         quit
         ;
 tExists(pass,fail)      ;@TEST "$DATA check: exists() returns 1/0 correctly"
         do clean
         do basicSet^globals("present","yes")
-        do eq^TESTRUN(.pass,.fail,$$exists^globals("present"),1,"exists() on set key")
-        do eq^TESTRUN(.pass,.fail,$$exists^globals("absent"),0,"exists() on missing key")
+        do eq^STDASSERT(.pass,.fail,$$exists^globals("present"),1,"exists() on set key")
+        do eq^STDASSERT(.pass,.fail,$$exists^globals("absent"),0,"exists() on missing key")
         quit
         ;
 tListKeys(pass,fail)    ;@TEST "$ORDER: listKeys returns all keys in order"
@@ -63,7 +63,7 @@ tListKeys(pass,fail)    ;@TEST "$ORDER: listKeys returns all keys in order"
         ; $ORDER returns keys in collation order (alphabetic for strings)
         new result
         set result=$$listKeys^globals()
-        do eq^TESTRUN(.pass,.fail,result,"apple,banana,cherry","keys in collation order")
+        do eq^STDASSERT(.pass,.fail,result,"apple,banana,cherry","keys in collation order")
         quit
         ;
 tMultiLevel(pass,fail)  ;@TEST "multi-level subscripts store independently"
@@ -71,11 +71,11 @@ tMultiLevel(pass,fail)  ;@TEST "multi-level subscripts store independently"
         do storeContact^globals("Alice","phone","555-1234")
         do storeContact^globals("Alice","email","alice@example.com")
         do storeContact^globals("Bob","phone","555-5678")
-        do eq^TESTRUN(.pass,.fail,$$getContact^globals("Alice","phone"),"555-1234","Alice phone")
-        do eq^TESTRUN(.pass,.fail,$$getContact^globals("Alice","email"),"alice@example.com","Alice email")
-        do eq^TESTRUN(.pass,.fail,$$getContact^globals("Bob","phone"),"555-5678","Bob phone")
+        do eq^STDASSERT(.pass,.fail,$$getContact^globals("Alice","phone"),"555-1234","Alice phone")
+        do eq^STDASSERT(.pass,.fail,$$getContact^globals("Alice","email"),"alice@example.com","Alice email")
+        do eq^STDASSERT(.pass,.fail,$$getContact^globals("Bob","phone"),"555-5678","Bob phone")
         ; Alice's data doesn't bleed into Bob's
-        do eq^TESTRUN(.pass,.fail,$$getContact^globals("Bob","email"),"","Bob email missing")
+        do eq^STDASSERT(.pass,.fail,$$getContact^globals("Bob","email"),"","Bob email missing")
         quit
         ;
 tListContacts(pass,fail)        ;@TEST "$ORDER on first level lists contact names"
@@ -85,7 +85,7 @@ tListContacts(pass,fail)        ;@TEST "$ORDER on first level lists contact name
         do storeContact^globals("Bob","phone","3")
         new result
         set result=$$listContacts^globals()
-        do eq^TESTRUN(.pass,.fail,result,"Alice,Bob,Zara","contacts in collation order")
+        do eq^STDASSERT(.pass,.fail,result,"Alice,Bob,Zara","contacts in collation order")
         quit
         ;
 tListFields(pass,fail)  ;@TEST "$ORDER on second level lists fields for one contact"
@@ -95,7 +95,7 @@ tListFields(pass,fail)  ;@TEST "$ORDER on second level lists fields for one cont
         do storeContact^globals("Alice","city","Portland")
         new result
         set result=$$listFields^globals("Alice")
-        do eq^TESTRUN(.pass,.fail,result,"city,email,phone","Alice fields in order")
+        do eq^STDASSERT(.pass,.fail,result,"city,email,phone","Alice fields in order")
         quit
         ;
 tDelContact(pass,fail)  ;@TEST "kill ^contacts(name) removes all fields for that contact"
@@ -103,6 +103,6 @@ tDelContact(pass,fail)  ;@TEST "kill ^contacts(name) removes all fields for that
         do storeContact^globals("Alice","phone","555-1234")
         do storeContact^globals("Bob","phone","555-9999")
         do delContact^globals("Alice")
-        do eq^TESTRUN(.pass,.fail,$$getContact^globals("Alice","phone"),"","Alice deleted")
-        do eq^TESTRUN(.pass,.fail,$$getContact^globals("Bob","phone"),"555-9999","Bob unaffected")
+        do eq^STDASSERT(.pass,.fail,$$getContact^globals("Alice","phone"),"","Alice deleted")
+        do eq^STDASSERT(.pass,.fail,$$getContact^globals("Bob","phone"),"555-9999","Bob unaffected")
         quit

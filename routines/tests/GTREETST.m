@@ -1,6 +1,6 @@
 GTREETST        ; Tests for gtree.m
         new pass,fail
-        do start^TESTRUN(.pass,.fail)
+        do start^STDASSERT(.pass,.fail)
         ;
         do tMkrefDepth1(.pass,.fail)
         do tMkrefDepth2(.pass,.fail)
@@ -8,7 +8,7 @@ GTREETST        ; Tests for gtree.m
         do tMkrefOrderSeed(.pass,.fail)
         do tStripCaret(.pass,.fail)
         ;
-        do report^TESTRUN(pass,fail)
+        do report^STDASSERT(pass,fail)
         ;
         ; Visual integration demo — not an assertion, just shows the output
         write !!,"── Integration demo ─────────────────────────────",!
@@ -21,7 +21,7 @@ tMkrefDepth1(pass,fail) ;@TEST "mkref at depth 1 builds ^global(key)"
         new path
         new result
         set result=$$mkref^gtree("demo",1,"apple")
-        do eq^TESTRUN(.pass,.fail,result,"^demo(""apple"")","mkref depth 1 with key")
+        do eq^STDASSERT(.pass,.fail,result,"^demo(""apple"")","mkref depth 1 with key")
         quit
         ;
 tMkrefDepth2(pass,fail) ;@TEST "mkref at depth 2 includes parent from path(1)"
@@ -29,7 +29,7 @@ tMkrefDepth2(pass,fail) ;@TEST "mkref at depth 2 includes parent from path(1)"
         set path(1)="Alice"
         new result
         set result=$$mkref^gtree("contacts",2,"phone")
-        do eq^TESTRUN(.pass,.fail,result,"^contacts(""Alice"",""phone"")","mkref depth 2")
+        do eq^STDASSERT(.pass,.fail,result,"^contacts(""Alice"",""phone"")","mkref depth 2")
         quit
         ;
 tMkrefDepth3(pass,fail) ;@TEST "mkref at depth 3 includes path(1) and path(2)"
@@ -38,7 +38,7 @@ tMkrefDepth3(pass,fail) ;@TEST "mkref at depth 3 includes path(1) and path(2)"
         set path(2)="Alice"
         new result
         set result=$$mkref^gtree("app",3,"age")
-        do eq^TESTRUN(.pass,.fail,result,"^app(""users"",""Alice"",""age"")","mkref depth 3")
+        do eq^STDASSERT(.pass,.fail,result,"^app(""users"",""Alice"",""age"")","mkref depth 3")
         quit
         ;
 tMkrefOrderSeed(pass,fail)      ;@TEST "mkref with empty key builds $ORDER seed"
@@ -46,7 +46,7 @@ tMkrefOrderSeed(pass,fail)      ;@TEST "mkref with empty key builds $ORDER seed"
         set path(1)="Alice"
         new result
         set result=$$mkref^gtree("contacts",2,"")
-        do eq^TESTRUN(.pass,.fail,result,"^contacts(""Alice"","""")","mkref $ORDER seed")
+        do eq^STDASSERT(.pass,.fail,result,"^contacts(""Alice"","""")","mkref $ORDER seed")
         quit
         ;
 tStripCaret(pass,fail)  ;@TEST "show() accepts ^gname with leading caret"
@@ -54,7 +54,7 @@ tStripCaret(pass,fail)  ;@TEST "show() accepts ^gname with leading caret"
         new gname
         set gname="^contacts"
         if $extract(gname,1)="^" set gname=$extract(gname,2,$length(gname))
-        do eq^TESTRUN(.pass,.fail,gname,"contacts","caret stripped from gname")
+        do eq^STDASSERT(.pass,.fail,gname,"contacts","caret stripped from gname")
         quit
         ;
 ; ── Integration demo ──────────────────────────────────────────────────────────
