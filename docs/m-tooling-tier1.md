@@ -1,3 +1,10 @@
+---
+created: 2026-04-27
+last_modified: 2026-04-27
+revisions: 2
+doc_type: [PLAN, DESIGN]
+---
+
 # M Tooling — Tier 1 Strategy: Closing the Inner-Loop Gaps
 
 **Document type:** Strategic plan, scoped

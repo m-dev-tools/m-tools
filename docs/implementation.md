@@ -1,3 +1,10 @@
+---
+created: 2026-04-27
+last_modified: 2026-04-27
+revisions: 1
+doc_type: [REFERENCE, STATUS]
+---
+
 # M Development Toolchain — Implementation
 
 **Document type:** Implementation status + as-built specifications

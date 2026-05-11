@@ -1,3 +1,10 @@
+---
+created: 2026-04-27
+last_modified: 2026-04-27
+revisions: 1
+doc_type: [GAP-ANALYSIS, PLAN]
+---
+
 # M Tools — Gap Analysis and Remediation Strategy
 
 **Document type:** Strategic planning
